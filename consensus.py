@@ -5,115 +5,127 @@ import time
 
 nb_clients = int(sys.argv[1])
 nb_servers = int(sys.argv[2])
+comm = MPI.COMM_WORLD
 
-def argmax(iterable):
-    return max(enumerate(iterable), key=lambda x: x[1])[0]
+def class Server(object):
+    """docstring for Server."""
 
-def clients():
-    comm = MPI.COMM_WORLD
-    rank = comm.Get_rank()
-    print(str(rank) + " : I'm a client")
-    for i in range(nb_servers):
-        req = comm.isend(rank, dest=i)
-        req.wait()
+    def __init__(self, rank):
+        super(Server, self).__init__()
+        self.rank = rank
 
-def init_servers():
-    comm = MPI.COMM_WORLD
-    rank = comm.Get_rank()
-    data = [None] * nb_clients
-    for i in range(nb_clients):
-        req = comm.irecv(source=nb_servers + i)
-        data[i] = req.wait()
-    return data
+    def recvFromClients(self):
+        data = [None] * nb_clients
+        for i in range(nb_clients):
+            req = comm.irecv(source=nb_servers + i)
+            data[i] = req.wait()
+        return data
 
-def consensus(term):
-    term += 1
-    comm = MPI.COMM_WORLD
-    rank = comm.Get_rank()
-    print(str(rank) + " time for consensus")
-    vote = [0] * nb_servers
-    voted = False
+    def argmax(iterable):
+        return max(enumerate(iterable), key=lambda x: x[1])[0]
 
-    for i in range(nb_servers):
-        if i == rank:
-            continue
-        req = comm.irecv(source=i, tag=0)
-        if req.get_status():
-            print(str(rank) + " received vote from " + str(i))
-            recv_term = req.wait()
-            if recv_term < term:
+    def consensus(self, term):
+        term += 1
+        print(f"Server {self.rank} start consensus")
+        vote = [0] * nb_servers
+        voted = False
+
+        for i in range(nb_servers):
+            if i == self.rank:
                 continue
-            term = recv_term
-            vote[i] += 1 + vote[rank]
-            vote[rank] = 0
-            voted = True
-            req.cancel()
-            req = comm.isend(vote[i], dest=i, tag=1)
+            req = comm.irecv(source=i)
+            if req.get_status():
+                print(str(self.rank) + " received vote from " + str(i))
+                recv_term = req.wait()
+                if recv_term < term:
+                    continue
+                term = recv_term
+                vote[i] += 1 + vote[self.rank]
+                vote[self.rank] = 0
+                voted = True
+                req.cancel()
+                req = comm.isend(vote[i], dest=i, tag=1)
+                req.wait()
+
+        if voted:
+            leader = argmax(vote)
+            req = comm.irecv(source=leader, tag=2)
+            print("server number " + str(self.rank) + " waiting for leader " + str(leader))
+            term = req.wait()
+            return term, leader
+
+        vote[self.rank] += 1
+        voted = True
+
+        for i in range(nb_servers):
+            req = comm.isend(term, dest=i, tag=0)
             req.wait()
 
-    if voted:
+        for i in range(nb_servers):
+            if i == self.rank:
+                continue
+            req = comm.irecv(source=i)
+            print("server " + str(self.rank) + " waiting for response")
+            if req.get_status():
+                vote[self.rank] += req.wait()
+            else:
+                req.cancel()
+
+        print("server number " + str(self.rank))
+        print(vote)
+
         leader = argmax(vote)
-        req = comm.irecv(source=leader, tag=2)
-        print("server number " + str(rank) + " waiting for leader " + str(leader))
-        term = req.wait()
-        return term, leader
+        if vote[leader] < nb_servers // 2 + 1:
+            print("server number " + str(self.rank) + " does not have enough vote")
+            return consensus(term)
 
-    vote[rank] += 1
-    voted = True
+        for i in range(nb_servers):
+            if i == self.rank:
+                continue
+            print("sent to " + str(i))
+            req = comm.isend(term, dest=i, tag=2)
+            req.wait()
+        print("server number " + str(self.rank) + " is sleeping")
 
-    for i in range(nb_servers):
-        req = comm.isend(term, dest=i, tag=0)
-        req.wait()
+        return (term, leader)
 
-    for i in range(nb_servers):
-        if i == rank:
-            continue
-        req = comm.irecv(source=i)
-        print("server " + str(rank) + " waiting for response")
-        if req.get_status():
-            vote[rank] += req.wait()
-        else:
-            req.cancel()
+    def run(self):
+        data = init_servers()
+        term = 0
+        while len(data) > 0:
+            term, leader = consensus(term)
+            print("server number " + str(self.rank) + ", leader is " + str(leader) + ", responding to " + str(data[0]))
+            elt = data[0]
+            data.remove(elt)
+            print(data)
+            time.sleep(1)
 
-    print("server number " + str(rank))
-    print(vote)
+def class Client(object):
+    """docstring for Client."""
 
-    leader = argmax(vote)
-    if vote[leader] < nb_servers // 2 + 1:
-        print("server number " + str(rank) + " does not have enough vote")
-        return consensus(term)
+    def __init__(self, rank):
+        super(Client, self).__init__()
+        self.rank = rank
 
-    for i in range(nb_servers):
-        if i == rank:
-            continue
-        print("sent to " + str(i))
-        req = comm.isend(term, dest=i, tag=2)
-        req.wait()
-    print("server number " + str(rank) + " is sleeping")
-
-    return (term, leader)
-
-def servers():
-    comm = MPI.COMM_WORLD
-    rank = comm.Get_rank()
-    data = init_servers()
-    term = 0
-    while len(data) > 0:
-        term, leader = consensus(term)
-        print("server number " + str(rank) + ", leader is " + str(leader) + ", responding to " + str(data[0]))
-        elt = data[0]
-        data.remove(elt)
-        print(data)
-        time.sleep(1)
+    def run(self):
+        print(str(self.rank) + " : I'm a client")
+        for i in range(nb_servers):
+            req = comm.isend(self.rank, dest=i)
+            req.wait()
 
 def main():
-    comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
-    
+
     if (rank < nb_servers):
-        servers()
+        myServer = Server(rank)
+
     if (rank >= nb_servers and rank < (nb_clients + nb_servers)):
-        clients()
+        myClient = Client(rank)
+        myClient.run()
+
+
+
+
 
 if __name__ == "__main__":
     main()
