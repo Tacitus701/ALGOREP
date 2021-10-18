@@ -1,4 +1,5 @@
 from mpi4py import MPI
+from enum import Enum
 import sys
 import random
 import time
@@ -7,12 +8,15 @@ nb_clients = int(sys.argv[1])
 nb_servers = int(sys.argv[2])
 comm = MPI.COMM_WORLD
 
-def class Server(object):
+
+class Server(object):
+
     """docstring for Server."""
 
     def __init__(self, rank):
         super(Server, self).__init__()
         self.rank = rank
+        self.role = "FOLLOWER"
 
     def recvFromClients(self):
         data = [None] * nb_clients
@@ -24,6 +28,53 @@ def class Server(object):
     def argmax(iterable):
         return max(enumerate(iterable), key=lambda x: x[1])[0]
 
+    def consensus(self, term):
+        #follower
+        #temps aléatoire -> candidat
+        """
+        vote pour lui
+        votez pour moi
+        infini et si leader il reset son timeout jusqu'à avoir plus de la moitié
+        """
+
+        vote = [0] * nb_servers
+        voted = False
+
+        # Sleep random amount of time before declaring himself candidate
+        sleep(randint(1, 5))
+        self.role = "CANDIDATE"
+
+        # Vote for himself
+        self.vote[self.rank] += 1
+        voted = True
+
+        
+        for i in range(nb_servers):
+            req = comm.isend(term, dest=i, tag=0)
+            req.wait()
+
+        for i in range(nb_servers):
+            if i == self.rank:
+                continue
+            req = comm.irecv(source=i)
+            print("server " + str(self.rank) + " waiting for response")
+            if req.get_status():
+                vote[self.rank] += req.wait()
+            else:
+                req.cancel()
+
+
+    def run(self):
+        data = init_servers()
+        term = 0
+        while len(data) > 0:
+            term, leader = consensus(term)
+            print("server number " + str(self.rank) + ", leader is " + str(leader) + ", responding to " + str(data[0]))
+            elt = data[0]
+            data.remove(elt)
+            print(data)
+            time.sleep(1)
+"""
     def consensus(self, term):
         term += 1
         print(f"Server {self.rank} start consensus")
@@ -88,19 +139,8 @@ def class Server(object):
         print("server number " + str(self.rank) + " is sleeping")
 
         return (term, leader)
-
-    def run(self):
-        data = init_servers()
-        term = 0
-        while len(data) > 0:
-            term, leader = consensus(term)
-            print("server number " + str(self.rank) + ", leader is " + str(leader) + ", responding to " + str(data[0]))
-            elt = data[0]
-            data.remove(elt)
-            print(data)
-            time.sleep(1)
-
-def class Client(object):
+"""
+class Client(object):
     """docstring for Client."""
 
     def __init__(self, rank):
