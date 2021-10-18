@@ -27,8 +27,6 @@ def init_servers():
     return data
 
 def consensus(term):
-    t = random.randint(0,1)
-    time.sleep(t)
     term += 1
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
@@ -42,23 +40,23 @@ def consensus(term):
         req = comm.irecv(source=i, tag=0)
         if req.get_status():
             print(str(rank) + " received vote from " + str(i))
+            recv_term = req.wait()
+            if recv_term < term:
+                continue
+            term = recv_term
             vote[i] += 1 + vote[rank]
             vote[rank] = 0
             voted = True
+            req.cancel()
             req = comm.isend(vote[i], dest=i, tag=1)
             req.wait()
 
     if voted:
         leader = argmax(vote)
-        print("server number " + str(rank) + " waiting for leader " + str(leader))
         req = comm.irecv(source=leader, tag=2)
-        time.sleep(2)
-        if req.get_status():
-            term = req.wait()
-            print("term " + str(term))
-            return term, leader
-        return consensus(term)
-
+        print("server number " + str(rank) + " waiting for leader " + str(leader))
+        term = req.wait()
+        return term, leader
 
     vote[rank] += 1
     voted = True
@@ -82,11 +80,16 @@ def consensus(term):
 
     leader = argmax(vote)
     if vote[leader] < nb_servers // 2 + 1:
+        print("server number " + str(rank) + " does not have enough vote")
         return consensus(term)
 
     for i in range(nb_servers):
+        if i == rank:
+            continue
+        print("sent to " + str(i))
         req = comm.isend(term, dest=i, tag=2)
         req.wait()
+    print("server number " + str(rank) + " is sleeping")
 
     return (term, leader)
 
@@ -101,6 +104,7 @@ def servers():
         elt = data[0]
         data.remove(elt)
         print(data)
+        time.sleep(1)
 
 def main():
     comm = MPI.COMM_WORLD
