@@ -9,7 +9,7 @@ nb_servers = int(sys.argv[2])
 comm = MPI.COMM_WORLD
 
 
-class Server(object):
+class Server():
 
     """docstring for Server."""
 
@@ -41,17 +41,20 @@ class Server(object):
         voted = False
 
         # Sleep random amount of time before declaring himself candidate
-        sleep(randint(1, 5))
+        time.sleep(randint(1, 5))
         self.role = "CANDIDATE"
 
         # Vote for himself
         self.vote[self.rank] += 1
         voted = True
 
-        
+
         for i in range(nb_servers):
-            req = comm.isend(term, dest=i, tag=0)
+            req = comm.isend(term, dest=i)
             req.wait()
+
+        while True:
+            #Wait for response or for vote request from higher term
 
         for i in range(nb_servers):
             if i == self.rank:
@@ -140,7 +143,7 @@ class Server(object):
 
         return (term, leader)
 """
-class Client(object):
+class Client():
     """docstring for Client."""
 
     def __init__(self, rank):
