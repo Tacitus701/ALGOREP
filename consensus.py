@@ -81,6 +81,7 @@ class Server():
             self.vote[src] = -2
 
         if (tag == HEARTBEAT):
+            self.role = "FOLLOWER"
             self.timeout += 2
             term, log = term
             self.term = term
