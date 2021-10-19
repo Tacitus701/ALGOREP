@@ -53,7 +53,6 @@ class Server():
                 req = comm.isend(self.term, dest=i)
                 req.wait()
 
-
         current_time = time.time()
         timeout = current_time + time.struct_time(tm_sec=5)
 
@@ -74,7 +73,7 @@ class Server():
         data = init_servers()
         term = 0
         while len(data) > 0:
-            term, leader = consensus(term)
+            term, leader = self.consensus(term)
             print("server number " + str(self.rank) + ", leader is " + str(leader) + ", responding to " + str(data[0]))
             elt = data[0]
             data.remove(elt)
