@@ -11,6 +11,7 @@ majority = nb_servers // 2 + 1
 
 VOTE_REQ, VOTE_POS, VOTE_NEG, HEARTBEAT = 0,1,2,3
 
+request = {0: "VOTE_REQ", 1: "VOTE_POS", 2: "VOTE_NEG", 3: "HEARTBEAT"}
 
 class Server():
 
@@ -54,7 +55,7 @@ class Server():
         src = status.source #status.Get_source()
         tag = status.tag
         term = comm.irecv().wait()
-        print("server number " + str(self.rank) + " source : " + str(src) + " tag : " + str(tag) + " term : " + str(term))
+        print("server number " + str(self.rank) + " source : " + str(src) + " tag : " + request[tag] + " term : " + str(term))
 
         if (tag == VOTE_REQ):
             if term > self.term:
@@ -71,7 +72,8 @@ class Server():
             self.vote[src] = self.rank
             nb_vote = len([vote for vote in self.vote if vote == self.rank])
             if nb_vote >= majority:
-                print("server number " + str(self.rank) + " is now leader")
+                if (self.role != "LEADER"):
+                    print("server number " + str(self.rank) + " is now leader")
                 self.role = "LEADER"
                 self.leader_heartbeat = time.time()
 
@@ -132,7 +134,8 @@ class Server():
                 terminate = True
 
         # Too long
-        print("server number " + str(self.rank) + " is now candidate")
+        if not terminate:
+            print("server number " + str(self.rank) + " is now candidate")
         self.role = "CANDIDATE"
 
         # Vote for himself
