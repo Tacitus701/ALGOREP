@@ -28,6 +28,14 @@ class Server():
     def argmax(iterable):
         return max(enumerate(iterable), key=lambda x: x[1])[0]
 
+    def handleMessage(self, term):
+
+        status = MPI.Status()
+        is_message = comm.Iprobe(status=status)
+        if (is_message):
+            src = status.source #status.Get_source()
+            msg = comm.irecv()
+
     def consensus(self, term):
         #follower
         #temps aléatoire -> candidat
@@ -50,11 +58,23 @@ class Server():
 
 
         for i in range(nb_servers):
+            if i == self.rank:
+                continue
             req = comm.isend(term, dest=i)
             req.wait()
 
+
+        current_time = time.time()
+        timeout = current_time + time.struct_time(tm_sec=5)
+
         while True:
-            #Wait for response or for vote request from higher term
+            if self.role == "FOLLOWER":
+                current_time = time.time()
+            # Too long
+            if (current_time > timeout):
+                return self.consensus(term + 1)
+
+            self.handleMessage(term)
 
         for i in range(nb_servers):
             if i == self.rank:
