@@ -17,6 +17,7 @@ class Server():
         super(Server, self).__init__()
         self.rank = rank
         self.role = "FOLLOWER"
+        self.term = 0
 
     def recvFromClients(self):
         data = [None] * nb_clients
@@ -36,7 +37,7 @@ class Server():
             src = status.source #status.Get_source()
             msg = comm.irecv()
 
-    def consensus(self, term):
+    def consensus(self):
         #follower
         #temps aléatoire -> candidat
         """
@@ -44,24 +45,22 @@ class Server():
         votez pour moi
         infini et si leader il reset son timeout jusqu'à avoir plus de la moitié
         """
+        self.term += 1
 
         vote = [0] * nb_servers
         voted = False
-
-        # Sleep random amount of time before declaring himself candidate
-        time.sleep(randint(1, 5))
-        self.role = "CANDIDATE"
 
         # Vote for himself
         self.vote[self.rank] += 1
         voted = True
 
 
-        for i in range(nb_servers):
-            if i == self.rank:
-                continue
-            req = comm.isend(term, dest=i)
-            req.wait()
+        if self.role == "CANDIDATE":
+            for i in range(nb_servers):
+                if i == self.rank:
+                    continue
+                req = comm.isend(term, dest=i)
+                req.wait()
 
 
         current_time = time.time()
@@ -72,7 +71,8 @@ class Server():
                 current_time = time.time()
             # Too long
             if (current_time > timeout):
-                return self.consensus(term + 1)
+                self.role = "CANDIDATE"
+                return self.consensus()
 
             self.handleMessage(term)
 
