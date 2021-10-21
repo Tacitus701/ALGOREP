@@ -9,9 +9,9 @@ nb_servers = int(sys.argv[2])
 comm = MPI.COMM_WORLD
 majority = nb_servers // 2 + 1
 
-VOTE_REQ, VOTE_POS, VOTE_NEG, HEARTBEAT = 0, 1, 2, 3
+VOTE_REQ, VOTE_POS, VOTE_NEG, HEARTBEAT, CLIENT_COMMAND = 0, 1, 2, 3, 4
 
-request = {0: "VOTE_REQ", 1: "VOTE_POS", 2: "VOTE_NEG", 3: "HEARTBEAT"}
+request = {0: "VOTE_REQ", 1: "VOTE_POS", 2: "VOTE_NEG", 3: "HEARTBEAT", 4: "CLIENT_COMMAND"}
 
 
 class Server:
@@ -53,8 +53,36 @@ class Server:
             self.log.append(log[i])
             self.data.remove(log[i])
 
-    def handle_recv(self):
+    def process_vote_request(self, src, term):
+        if term > self.term:
+            self.update_term(term)
+            self.vote = [-1] * nb_servers
+            self.vote[self.rank] = src
+            self.role = "FOLLOWER"
+            self.timeout += 2
+            comm.isend(self.term, dest=src, tag=VOTE_POS)
+        else:
+            comm.isend(self.term, dest=src, tag=VOTE_NEG)
 
+    def process_positive_vote(self, src):
+        if self.role != "CANDIDATE":
+            return
+        self.vote[src] = self.rank
+        nb_vote = len([vote for vote in self.vote if vote == self.rank])
+        if nb_vote >= majority:
+            if self.role != "LEADER":
+                print("server number " + str(self.rank) + " is now leader")
+            self.role = "LEADER"
+            self.leader_heartbeat = time.time()
+
+    def process_heartbeat(self, msg):
+        self.role = "FOLLOWER"
+        self.timeout += 2
+        term, log = msg
+        self.update_term(term)
+        self.handle_log(log)
+
+    def handle_recv(self):
         status = MPI.Status()
         is_message = comm.Iprobe(status=status)
 
@@ -63,41 +91,23 @@ class Server:
 
         src = status.source  # status.Get_source()
         tag = status.tag
-        term = comm.irecv().wait()
+        msg = comm.irecv().wait()
         print("server number " + str(self.rank)
               + " source : " + str(src)
               + " tag : " + request[tag]
-              + " term : " + str(term))
+              + " term : " + str(msg))
 
         if tag == VOTE_REQ:
-            if term > self.term:
-                self.update_term(term)
-                self.vote = [-1] * nb_servers
-                self.vote[self.rank] = src
-                self.role = "FOLLOWER"
-                self.timeout += 2
-                comm.isend(self.term, dest=src, tag=VOTE_POS)
-            else:
-                comm.isend(self.term, dest=src, tag=VOTE_NEG)
+            self.process_vote_request(src, msg)
 
         if tag == VOTE_POS:
-            self.vote[src] = self.rank
-            nb_vote = len([vote for vote in self.vote if vote == self.rank])
-            if nb_vote >= majority:
-                if self.role != "LEADER":
-                    print("server number " + str(self.rank) + " is now leader")
-                self.role = "LEADER"
-                self.leader_heartbeat = time.time()
+            self.process_positive_vote(src)
 
         if tag == VOTE_NEG:
             self.vote[src] = -2
 
         if tag == HEARTBEAT:
-            self.role = "FOLLOWER"
-            self.timeout += 2
-            term, log = term
-            self.update_term(term)
-            self.handle_log(log)
+            self.process_heartbeat(msg)
 
     def handle_send(self):
         tmp = time.time()
@@ -131,7 +141,7 @@ class Server:
         self.update_term(self.term + 1)
 
         current_time = time.time()
-        self.timeout = current_time + random.randint(3, 5)
+        self.timeout = current_time + random.uniform(3.0, 5.0)
 
         while (current_time <= self.timeout) and not terminate:
             if self.role != "LEADER":
