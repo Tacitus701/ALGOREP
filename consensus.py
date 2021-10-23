@@ -16,6 +16,10 @@ request = {0: "VOTE_REQ", 1: "VOTE_POS", 2: "VOTE_NEG", 3: "HEARTBEAT", 4: "CLIE
 
 REPL = 0
 
+START, CRASH, SPEED, RECOVERY = 0,1,2,3
+
+speed_value = {"LOW" : 1, "MEDIUM": 2, "HIGH": 3}
+
 def debug_out(msg):
     if debug_output:
         print(msg)
@@ -159,18 +163,25 @@ class Server:
                         comm.isend((self.term, self.log), dest=i, tag=HEARTBEAT)
 
     def handle_repl(self):
-        is_message = comm.Iprobe(src=REPL)
+        status = MPI.Status()
+        is_message = comm.Iprobe(status=status)
 
         if not is_message:
             return
 
+        tag = status.tag
         msg = comm.irecv().wait()
        
-        if msg == "START":
+        if tag == START:
             self.start = True
-        elif msg == "CRASH":
+        elif tag == CRASH:
             self.crash = True
-        # elif msg == "SPEED"
+        elif tag == SPEED:
+            self.speed = msg
+        elif tag == RECOVERY:
+            self.crash = False
+
+        return
 
     def consensus(self):
         # follower
@@ -215,6 +226,8 @@ class Client:
         self.rank = rank
 
     def run(self):
+        req = comm.irecv()
+        req.wait()
         debug_out(str(self.rank) + " : I'm a client")
         nb_req = 1
         while nb_req > 0:
@@ -229,11 +242,18 @@ def REPL():
         command = command.split()
         print(command)
         if command[0] == "START":
-            continue
+            for i in range(1, nb_servers + nb_clients + 1):
+                req = comm.isend("START", dest=i, tag=START)
+                req.wait()
         elif command[0] == "CRASH":
-            continue
+            comm.isend("CRASH", dest=command[1], tag=CRASH)
         elif command[0] == "SPEED":
-            continue
+            comm.isend(speed_value[command[2]], dest=command[1], tag=SPEED)
+        elif command[0] == "RECOVERY":
+            comm.isend("RECOVERY", dest=command[1], tag=RECOVERY)
+        else:
+            print("Invalid command")
+        time.sleep(0.1)
 
 def main():
     rank = comm.Get_rank()
