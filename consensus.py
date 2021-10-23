@@ -13,6 +13,7 @@ VOTE_REQ, VOTE_POS, VOTE_NEG, HEARTBEAT, CLIENT_COMMAND = 0, 1, 2, 3, 4
 
 request = {0: "VOTE_REQ", 1: "VOTE_POS", 2: "VOTE_NEG", 3: "HEARTBEAT", 4: "CLIENT_COMMAND"}
 
+REPL = 0
 
 class Server:
 
@@ -28,9 +29,12 @@ class Server:
         self.request_vote = 0
         self.log = []
         self.replicated = []
-        self.vote = [-1] * nb_servers
+        self.vote = [-1] * (nb_servers + 1)
         self.waiting_clients = []
         self.terminate = False
+        self.start = False
+        self.crash = False
+        self.speed = 0
 
     def save_term(self):
         filename = "disk/" + str(self.rank) + ".term"
@@ -132,7 +136,7 @@ class Server:
             if tmp > self.request_vote + 1:
                 print("server number " + str(self.rank) + " is sending VOTE_REQ to everyone")
                 self.request_vote = time.time()
-                for i in range(nb_servers):
+                for i in range(1, nb_servers + 1):
                     if self.vote[i] == -1:
                         req = comm.isend(self.term, dest=i, tag=VOTE_REQ)
 
@@ -144,9 +148,23 @@ class Server:
             if tmp > self.leader_heartbeat + 1:
                 self.replicated = [1] * len(self.log)
                 self.leader_heartbeat = time.time()
-                for i in range(nb_servers):
+                for i in range(1, nb_servers + 1):
                     if i != self.rank:
                         comm.isend((self.term, self.log), dest=i, tag=HEARTBEAT)
+
+    def handle_repl(self):
+        is_message = comm.Iprobe(src=REPL)
+
+        if not is_message:
+            return
+
+        msg = comm.irecv().wait()
+       
+        if msg == "START":
+            self.start = True
+        elif msg == "CRASH":
+            self.crash = True
+        elif msg == "SPEED"
 
     def consensus(self):
         # follower
@@ -164,8 +182,10 @@ class Server:
         while current_time <= self.timeout:
             if self.role != "LEADER":
                 current_time = time.time()
-            self.handle_message()
-            self.handle_send()
+            if self.start and not self.crash:
+                self.handle_message()
+                self.handle_send()
+            handle_repl()
 
         # Too long
         print("server number " + str(self.rank) + " is now candidate")
@@ -175,6 +195,7 @@ class Server:
         self.vote[self.rank] = self.rank
 
     def run(self):
+        print(str(self.rank) + " is a server")
         while not self.terminate:
             self.consensus()
         print("server number " + str(self.rank) + " log : " + str(self.log))
@@ -193,20 +214,35 @@ class Client:
         while nb_req > 0:
             nb_req -= 1
             time.sleep(random.uniform(5, 8))
-            for i in range(nb_servers):
+            for i in range(1, nb_servers + 1):
                 req = comm.isend(self.rank, dest=i, tag=CLIENT_COMMAND)
 
+def REPL():
+    while True:
+        command = input("REPL : ")
+        command = command.split()
+        print(command)
+        if command[0] == "START":
+            continue
+        elif command[0] == "CRASH":
+            continue
+        elif command[0] == "SPEED":
+            continue
 
 def main():
     rank = comm.Get_rank()
 
-    if rank < nb_servers:
+    if rank == 0:
+        REPL()
+
+    if rank <= nb_servers:
         my_server = Server(rank)
         my_server.run()
 
-    if nb_servers <= rank < (nb_clients + nb_servers):
+    elif nb_servers < rank < (nb_clients + nb_servers + 1):
         my_client = Client(rank)
         my_client.run()
+
 
 
 if __name__ == "__main__":
