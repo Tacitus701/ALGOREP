@@ -14,8 +14,6 @@ VOTE_REQ, VOTE_POS, VOTE_NEG, HEARTBEAT, CLIENT_COMMAND = 0, 1, 2, 3, 4
 
 request = {0: "VOTE_REQ", 1: "VOTE_POS", 2: "VOTE_NEG", 3: "HEARTBEAT", 4: "CLIENT_COMMAND"}
 
-REPL = 0
-
 START, CRASH, SPEED, RECOVERY = 0,1,2,3
 
 speed_value = {"LOW" : 1, "MEDIUM": 2, "HIGH": 3}
@@ -69,7 +67,7 @@ class Server:
     def process_vote_request(self, src, term):
         if term > self.term:
             self.update_term(term)
-            self.vote = [-1] * nb_servers
+            self.vote = [-1] * (nb_servers + 1)
             self.vote[self.rank] = src
             self.role = "FOLLOWER"
             self.timeout += 2
@@ -202,16 +200,19 @@ class Server:
             if self.start and not self.crash:
                 self.handle_message()
                 self.handle_send()
-            # handle_repl()
+            self.handle_repl()
 
         # Too long
         debug_out("server number " + str(self.rank) + " is now candidate")
         self.role = "CANDIDATE"
+        self.vote = [-1] * (nb_servers + 1)
 
         # Vote for himself
         self.vote[self.rank] = self.rank
 
     def run(self):
+        while not self.start:
+            self.handle_repl()
         print(str(self.rank) + " is a server")
         while not self.terminate:
             self.consensus()
@@ -226,7 +227,7 @@ class Client:
         self.rank = rank
 
     def run(self):
-        req = comm.irecv()
+        req = comm.irecv(source=0)
         req.wait()
         debug_out(str(self.rank) + " : I'm a client")
         nb_req = 1
@@ -246,11 +247,11 @@ def REPL():
                 req = comm.isend("START", dest=i, tag=START)
                 req.wait()
         elif command[0] == "CRASH":
-            comm.isend("CRASH", dest=command[1], tag=CRASH)
+            comm.isend("CRASH", dest=int(command[1]), tag=CRASH)
         elif command[0] == "SPEED":
-            comm.isend(speed_value[command[2]], dest=command[1], tag=SPEED)
+            comm.isend(speed_value[command[2]], dest=int(command[1]), tag=SPEED)
         elif command[0] == "RECOVERY":
-            comm.isend("RECOVERY", dest=command[1], tag=RECOVERY)
+            comm.isend("RECOVERY", dest=int(command[1]), tag=RECOVERY)
         else:
             print("Invalid command")
         time.sleep(0.1)
