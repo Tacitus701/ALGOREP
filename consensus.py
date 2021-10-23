@@ -6,12 +6,18 @@ import os
 
 nb_clients = int(sys.argv[1])
 nb_servers = int(sys.argv[2])
+debug_output = True if sys.argv[3] == "y" else False
 comm = MPI.COMM_WORLD
 majority = nb_servers // 2 + 1
 
 VOTE_REQ, VOTE_POS, VOTE_NEG, HEARTBEAT, CLIENT_COMMAND = 0, 1, 2, 3, 4
 
 request = {0: "VOTE_REQ", 1: "VOTE_POS", 2: "VOTE_NEG", 3: "HEARTBEAT", 4: "CLIENT_COMMAND"}
+
+
+def debug_out(msg):
+    if debug_output:
+        print(msg)
 
 
 class Server:
@@ -44,7 +50,7 @@ class Server:
         self.save_term()
 
     def notify_client(self):
-        print("notifying client " + str(self.waiting_clients[0]))
+        debug_out("notifying client " + str(self.waiting_clients[0]))
         comm.isend(self.waiting_clients[0], dest=self.waiting_clients[0])
         self.waiting_clients.pop(0)
 
@@ -70,7 +76,7 @@ class Server:
         nb_vote = len([vote for vote in self.vote if vote == self.rank])
         if nb_vote >= majority:
             if self.role != "LEADER":
-                print("server number " + str(self.rank) + " is now leader")
+                debug_out("server number " + str(self.rank) + " is now leader")
             self.role = "LEADER"
             self.leader_heartbeat = time.time()
 
@@ -103,7 +109,7 @@ class Server:
         src = status.source  # status.Get_source()
         tag = status.tag
         msg = comm.irecv().wait()
-        print("server number " + str(self.rank)
+        debug_out("server number " + str(self.rank)
               + " source : " + str(src)
               + " tag : " + request[tag]
               + " term : " + str(msg))
@@ -120,7 +126,7 @@ class Server:
         if tag == HEARTBEAT:
             if self.role != "LEADER":
                 self.process_heartbeat(src, msg)
-            else: # on utilise le tag heartbeat pour repondre au heartbeat
+            else:  # on utilise le tag heartbeat pour repondre au heartbeat
                 self.process_heartbeat_response(src, msg)
 
         if tag == CLIENT_COMMAND:
@@ -130,7 +136,7 @@ class Server:
         tmp = time.time()
         if self.role == "CANDIDATE":
             if tmp > self.request_vote + 1:
-                print("server number " + str(self.rank) + " is sending VOTE_REQ to everyone")
+                debug_out("server number " + str(self.rank) + " is sending VOTE_REQ to everyone")
                 self.request_vote = time.time()
                 for i in range(nb_servers):
                     if self.vote[i] == -1:
@@ -168,7 +174,7 @@ class Server:
             self.handle_send()
 
         # Too long
-        print("server number " + str(self.rank) + " is now candidate")
+        debug_out("server number " + str(self.rank) + " is now candidate")
         self.role = "CANDIDATE"
 
         # Vote for himself
@@ -177,7 +183,7 @@ class Server:
     def run(self):
         while not self.terminate:
             self.consensus()
-        print("server number " + str(self.rank) + " log : " + str(self.log))
+        debug_out("server number " + str(self.rank) + " log : " + str(self.log))
 
 
 class Client:
@@ -188,7 +194,7 @@ class Client:
         self.rank = rank
 
     def run(self):
-        print(str(self.rank) + " : I'm a client")
+        debug_out(str(self.rank) + " : I'm a client")
         nb_req = 1
         while nb_req > 0:
             nb_req -= 1
