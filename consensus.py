@@ -61,11 +61,11 @@ class Server:
         self.waiting_clients.pop(0)
 
     def handle_log(self, log):
-        for i in range(len(self.log), len(log)):
-            self.log.append(log[i])
+        self.log = log.copy()
 
-    def process_vote_request(self, src, term):
-        if term > self.term:
+    def process_vote_request(self, src, msg):
+        term, log = msg
+        if term > self.term and len(log) >= len(self.log):
             self.update_term(term)
             self.vote = [-1] * (nb_servers + 1)
             self.vote[self.rank] = src
@@ -146,7 +146,7 @@ class Server:
                 self.request_vote = time.time()
                 for i in range(1, nb_servers + 1):
                     if self.vote[i] == -1:
-                        req = comm.isend(self.term, dest=i, tag=VOTE_REQ)
+                        req = comm.isend((self.term, self.log), dest=i, tag=VOTE_REQ)
 
         if self.role == "LEADER":
             if len(self.waiting_clients) > 0:
