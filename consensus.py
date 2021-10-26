@@ -102,7 +102,7 @@ class Server:
     def process_client_command(self, src, msg):
         if self.role == "LEADER":
             self.log.append(msg)
-            self.replicated.append(0)
+            self.replicated.append(1)
             self.waiting_clients.append(src)
 
     def handle_message(self):
@@ -225,8 +225,22 @@ class Client:
     def __init__(self, rank):
         super(Client, self).__init__()
         self.rank = rank
+        self.nb_command = 10
+        self.commands = []
+
+    def wait_start(self):
+        req = comm.irecv(source=0)
+        req.wait()
+
+    def read_commands(self):
+        filename = "client/" + str(self.rank) + ".command"
+        file = open(filename)
+        self.commands = file.read().splitlines()
+        file.close()
 
     def run(self):
+        self.wait_start()
+        self.read_commands()
         req = comm.irecv(source=0)
         req.wait()
         debug_out(str(self.rank) + " : I'm a client")
@@ -234,12 +248,16 @@ class Client:
         while nb_req > 0:
             nb_req -= 1
             time.sleep(random.uniform(5, 8))
+            command = random.randint(0, nb_command - 1)
             for i in range(1, nb_servers + 1):
-                req = comm.isend(self.rank, dest=i, tag=CLIENT_COMMAND)
+                req = comm.isend(commands[command], dest=i, tag=CLIENT_COMMAND)
 
 def REPL():
     while True:
-        command = input("REPL : ")
+        try:
+            command = input("REPL : ")
+        except EOFError as e:
+            break
         command = command.split()
         print(command)
         if command[0] == "START":
