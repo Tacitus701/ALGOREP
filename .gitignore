@@ -1,3 +1,5 @@
 venv/
 disk/
+client/
 .idea/
+__pycache__/
