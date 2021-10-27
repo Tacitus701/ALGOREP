@@ -10,11 +10,10 @@ debug_output = True if sys.argv[3] == "y" else False
 comm = MPI.COMM_WORLD
 majority = nb_servers // 2 + 1
 
-VOTE_REQ, VOTE_POS, VOTE_NEG, HEARTBEAT, CLIENT_COMMAND = 0, 1, 2, 3, 4
+VOTE_REQ, VOTE_POS, VOTE_NEG, HEARTBEAT, CLIENT_COMMAND, START, CRASH, SPEED, RECOVERY = 0, 1, 2, 3, 4, 5, 6, 7, 8
 
-request = {0: "VOTE_REQ", 1: "VOTE_POS", 2: "VOTE_NEG", 3: "HEARTBEAT", 4: "CLIENT_COMMAND"}
-
-START, CRASH, SPEED, RECOVERY = 0,1,2,3
+request = {0: "VOTE_REQ", 1: "VOTE_POS", 2: "VOTE_NEG", 3: "HEARTBEAT", 4: "CLIENT_COMMAND",
+           5: "START", 6: "CRASH", 7: "SPEED", 8: "RECOVERY"}
 
 speed_value = {"LOW" : 1, "MEDIUM": 2, "HIGH": 3}
 
@@ -116,7 +115,6 @@ class Server:
 
     def process_client_command(self, src, msg):
         if self.role == "LEADER":
-            print("Receiving " + msg + " from " + str(src))
             self.log.append(msg)
             self.replicated.append(1)
             self.waiting_clients.append((msg, src))
@@ -132,13 +130,13 @@ class Server:
         tag = status.tag
         msg = comm.irecv().wait()
 
-        if src == 0:
-            if tag == CRASH:
-                self.crash = True
-            elif tag == SPEED:
-                self.speed = msg
-            elif tag == RECOVERY:
-                self.crash = False
+        if tag == CRASH:
+            self.crash = True
+            self.role = "FOLLOWER"
+        elif tag == SPEED:
+            self.speed = msg
+        elif tag == RECOVERY:
+            self.crash = False
 
         if self.crash:
             return
@@ -164,7 +162,6 @@ class Server:
                 self.process_heartbeat_response(src, msg)
 
         elif tag == CLIENT_COMMAND:
-            print("server number " + str(self.rank) + " received message")
             self.process_client_command(src, msg)
 
 
@@ -213,10 +210,11 @@ class Server:
         self.timeout = current_time + random.uniform(3.0, 8.0)
 
         while current_time <= self.timeout:
-            if self.role != "LEADER":
+            if self.role != "LEADER" and not self.crash:
                 current_time = time.time()
             self.handle_message()
-            self.handle_send()
+            if not self.crash:
+                self.handle_send()
 
         # Too long
         debug_out("server number " + str(self.rank) + " has timed out")
