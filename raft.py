@@ -62,11 +62,16 @@ class Server:
         filename = "disk/" + str(self.rank) + ".command"
         os.makedirs(os.path.dirname(filename), exist_ok=True)
         with open(filename, "a") as file:
-            file.write("Message : " + msg + " Client : " + str(src) + "\n")
+            file.write("Message : " + msg + "\n")
 
 
     def handle_log(self, log):
         self.log = log.copy()
+        filename = "disk/" + str(self.rank) + ".command"
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
+        with open(filename, "w") as file:
+            for elt in self.log:
+                file.write("Message : " + elt + "\n")
 
     def process_vote_request(self, src, msg):
         #print("server number " + str(self.rank) + " received vote request term : " + str(self.term))
@@ -112,7 +117,7 @@ class Server:
     def process_client_command(self, src, msg):
         if self.role == "LEADER":
             print("Receiving " + msg + " from " + str(src))
-            self.log.append((msg, src))
+            self.log.append(msg)
             self.replicated.append(1)
             self.waiting_clients.append((msg, src))
 
@@ -141,7 +146,7 @@ class Server:
         debug_out("server number " + str(self.rank)
               + " source : " + str(src)
               + " tag : " + request[tag]
-              + " message : " + str(msg) + " " + str(time.time()))
+              + " message : " + str(msg))
 
         if tag == VOTE_REQ:
             self.process_vote_request(src, msg)
@@ -177,7 +182,7 @@ class Server:
                     if self.vote[i] == -1:
                         req = comm.isend((self.term, self.log), dest=i, tag=VOTE_REQ)
                         req.wait()
-                debug_out("server number " + str(self.rank) + " is sending VOTE_REQ to everyone " + str(time.time()))
+                debug_out("server number " + str(self.rank) + " is sending VOTE_REQ to everyone")
 
         if self.role == "LEADER":
             if len(self.waiting_clients) > 0:
@@ -185,7 +190,7 @@ class Server:
                 if self.replicated[-len(self.waiting_clients)] >= majority:
                     self.notify_client()
             if tmp > self.leader_heartbeat + 2:
-                debug_out("Server number " + str(self.rank) + " Sending HeartBeat time : " + str(time.time()))
+                debug_out("Server number " + str(self.rank) + " Sending HeartBeat")
                 self.replicated = [1] * len(self.log)
                 self.leader_heartbeat = time.time()
                 for i in range(1, nb_servers + 1):
