@@ -123,11 +123,21 @@ class Server:
         if not is_message:
             return
 
-        print("Message")
-
         src = status.source  # status.Get_source()
         tag = status.tag
         msg = comm.irecv().wait()
+
+        if src == 0:
+            if tag == CRASH:
+                self.crash = True
+            elif tag == SPEED:
+                self.speed = msg
+            elif tag == RECOVERY:
+                self.crash = False
+
+        if self.crash:
+            return
+
         debug_out("server number " + str(self.rank)
               + " source : " + str(src)
               + " tag : " + request[tag]
@@ -151,6 +161,7 @@ class Server:
         elif tag == CLIENT_COMMAND:
             print("server number " + str(self.rank) + " received message")
             self.process_client_command(src, msg)
+
 
     def handle_send(self):
         tmp = time.time()
@@ -182,24 +193,6 @@ class Server:
                         req = comm.isend((self.term, self.log), dest=i, tag=HEARTBEAT)
                         req.wait()
 
-    def handle_repl(self):
-        status = MPI.Status()
-        is_message = comm.Iprobe(status=status)
-
-        if not is_message:
-            return
-
-        tag = status.tag
-        msg = comm.irecv().wait()
-       
-        if tag == CRASH:
-            self.crash = True
-        elif tag == SPEED:
-            self.speed = msg
-        elif tag == RECOVERY:
-            self.crash = False
-
-        return
 
     def consensus(self):
         # follower
@@ -217,16 +210,16 @@ class Server:
         while current_time <= self.timeout:
             if self.role != "LEADER":
                 current_time = time.time()
-            if not self.crash:
-                self.handle_message()
-                self.handle_send()
-            self.handle_repl()
+            self.handle_message()
+            self.handle_send()
 
         # Too long
         debug_out("server number " + str(self.rank) + " has timed out")
         debug_out("server number " + str(self.rank) + " is now candidate")
         self.role = "CANDIDATE"
         self.vote = [-1] * (nb_servers + 1)
+        if nb_servers == 1:
+            self.role = "LEADER"
 
         # Vote for himself
         self.vote[self.rank] = self.rank
@@ -264,13 +257,13 @@ class Client:
         nb_req = 3
         while nb_req > 0:
             nb_req -= 1
-            #time.sleep(random.uniform(5, 8))
+            time.sleep(random.uniform(5, 8))
             command = random.randint(0, self.nb_command - 1)
             print("Sending message " + str(self.commands[command]))
             for i in range(1, nb_servers + 1):
                 req = comm.isend(self.commands[command], dest=i, tag=CLIENT_COMMAND)
                 req.wait()
-                time.sleep(10)
+
 
 def REPL():
     while True:
