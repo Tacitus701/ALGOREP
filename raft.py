@@ -56,14 +56,13 @@ class Server:
         self.save_term()
 
     def notify_client(self):
-        print("notif")
         debug_out("notifying client " + str(self.waiting_clients[0]))
         comm.isend(self.waiting_clients[0][0], dest=self.waiting_clients[0][1])
         msg, src = self.waiting_clients.pop(0)
         filename = "disk/" + str(self.rank) + ".command"
         os.makedirs(os.path.dirname(filename), exist_ok=True)
-        with open(filename, "w") as file:
-            file.write("Message : " + msg + " Client : " + src)
+        with open(filename, "a") as file:
+            file.write("Message : " + msg + " Client : " + str(src) + "\n")
 
 
     def handle_log(self, log):
@@ -160,6 +159,7 @@ class Server:
                 debug_out("server number " + str(self.rank) + " is now leader")
                 self.role = "LEADER"
                 self.leader_heartbeat = time.time()
+                return
             if tmp > self.request_vote + 1:
                 self.request_vote = time.time()
                 for i in range(1, nb_servers + 1):
@@ -173,7 +173,7 @@ class Server:
                 # on notifie le client si le log a ete replique chez une majorite
                 if self.replicated[-len(self.waiting_clients)] >= majority:
                     self.notify_client()
-            if tmp > self.leader_heartbeat + 1:
+            if tmp > self.leader_heartbeat + 2:
                 debug_out("Server number " + str(self.rank) + " Sending HeartBeat time : " + str(time.time()))
                 self.replicated = [1] * len(self.log)
                 self.leader_heartbeat = time.time()
@@ -264,12 +264,13 @@ class Client:
         nb_req = 3
         while nb_req > 0:
             nb_req -= 1
-            time.sleep(random.uniform(5, 8))
+            #time.sleep(random.uniform(5, 8))
             command = random.randint(0, self.nb_command - 1)
             print("Sending message " + str(self.commands[command]))
             for i in range(1, nb_servers + 1):
                 req = comm.isend(self.commands[command], dest=i, tag=CLIENT_COMMAND)
                 req.wait()
+                time.sleep(10)
 
 def REPL():
     while True:
