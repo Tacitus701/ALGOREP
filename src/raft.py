@@ -15,7 +15,7 @@ VOTE_REQ, VOTE_POS, VOTE_NEG, HEARTBEAT, CLIENT_COMMAND, START, CRASH, SPEED, RE
 request = {0: "VOTE_REQ", 1: "VOTE_POS", 2: "VOTE_NEG", 3: "HEARTBEAT", 4: "CLIENT_COMMAND",
            5: "START", 6: "CRASH", 7: "SPEED", 8: "RECOVERY"}
 
-speed_value = {"LOW" : 1, "MEDIUM": 2, "HIGH": 3}
+LOW, MEDIUM, HIGH = 3, 2, 1
 
 def debug_out(msg):
     if debug_output:
@@ -41,7 +41,7 @@ class Server:
         self.terminate = False
         self.start = False
         self.crash = False
-        self.speed = 0
+        self.speed = MEDIUM
 
     def save_term(self):
         filename = "disk/" + str(self.rank) + ".term"
@@ -80,7 +80,7 @@ class Server:
             self.vote = [-1] * (nb_servers + 1)
             self.vote[self.rank] = src
             self.role = "FOLLOWER"
-            self.timeout += random.randint(2, 5)
+            self.timeout += random.randint(3, 5)
             req = comm.isend(self.term, dest=src, tag=VOTE_POS)
             req.wait()
         else:
@@ -101,7 +101,7 @@ class Server:
     def process_heartbeat(self, src, msg):
         debug_out("server number " + str(self.rank) + " receiving HeartBeat")
         self.role = "FOLLOWER"
-        self.timeout += random.randint(2, 5)
+        self.timeout += random.randint(3, 5)
         term, log = msg
         self.update_term(term)
         self.handle_log(log)
@@ -134,7 +134,12 @@ class Server:
             self.crash = True
             self.role = "FOLLOWER"
         elif tag == SPEED:
-            self.speed = msg
+            if msg == "LOW":
+                self.speed = LOW
+            elif msg == "MEDIUM":
+                self.speed = MEDIUM
+            elif msg == "HIGH":
+                self.speed = HIGH
         elif tag == RECOVERY:
             self.crash = False
 
@@ -186,7 +191,7 @@ class Server:
                 # on notifie le client si le log a ete replique chez une majorite
                 if self.replicated[-len(self.waiting_clients)] >= majority:
                     self.notify_client()
-            if tmp > self.leader_heartbeat + 2:
+            if tmp > self.leader_heartbeat + self.speed:
                 debug_out("Server number " + str(self.rank) + " Sending HeartBeat")
                 self.replicated = [1] * len(self.log)
                 self.leader_heartbeat = time.time()
