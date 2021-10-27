@@ -3,5 +3,8 @@ all: requirement
 requirement:
 	pip install -r requirements.txt
 
-run:
+run: clean
 	python3 main.py
+
+clean:
+	rm -f client/* disk/*

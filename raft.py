@@ -57,8 +57,13 @@ class Server:
 
     def notify_client(self):
         debug_out("notifying client " + str(self.waiting_clients[0]))
-        comm.isend(self.waiting_clients[0], dest=self.waiting_clients[0])
-        self.waiting_clients.pop(0)
+        comm.isend(self.waiting_clients[0][0], dest=self.waiting_clients[0][1])
+        msg, src = self.waiting_clients.pop(0)
+        filename = "disk/" + str(self.rank) + ".command"
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
+        with open(filename, "w") as file:
+            file.write("Message : " + msg + " Client : " + src)
+
 
     def handle_log(self, log):
         self.log = log.copy()
@@ -82,13 +87,14 @@ class Server:
         nb_vote = len([vote for vote in self.vote if vote == self.rank])
         if nb_vote >= majority:
             if self.role != "LEADER":
-                debug_out("server number " + str(self.rank) + " is now leader")
+                print("server number " + str(self.rank) + " is now leader")
             self.role = "LEADER"
             self.leader_heartbeat = time.time()
 
     def process_heartbeat(self, src, msg):
+        debug_out("server number " + str(self.rank) + " receiving HeartBeat")
         self.role = "FOLLOWER"
-        self.timeout += 2
+        self.timeout += 3
         term, log = msg
         self.update_term(term)
         self.handle_log(log)
@@ -101,9 +107,10 @@ class Server:
 
     def process_client_command(self, src, msg):
         if self.role == "LEADER":
-            self.log.append(msg)
+            print("Receiving " + msg + " from " + src)
+            self.log.append((msg, src))
             self.replicated.append(1)
-            self.waiting_clients.append(src)
+            self.waiting_clients.append((msg, src))
 
     def handle_message(self):
         status = MPI.Status()
@@ -154,6 +161,7 @@ class Server:
                 if self.replicated[-len(self.waiting_clients)] >= majority:
                     self.notify_client()
             if tmp > self.leader_heartbeat + 1:
+                debug_out("Server number " + str(self.rank) + " Sending HeartBeat")
                 self.replicated = [1] * len(self.log)
                 self.leader_heartbeat = time.time()
                 for i in range(1, nb_servers + 1):
@@ -203,6 +211,7 @@ class Server:
             self.handle_repl()
 
         # Too long
+        debug_out("server number " + str(self.rank) + " has timed out")
         debug_out("server number " + str(self.rank) + " is now candidate")
         self.role = "CANDIDATE"
         self.vote = [-1] * (nb_servers + 1)
@@ -241,16 +250,16 @@ class Client:
     def run(self):
         self.wait_start()
         self.read_commands()
-        req = comm.irecv(source=0)
-        req.wait()
         debug_out(str(self.rank) + " : I'm a client")
-        nb_req = 1
+        nb_req = 3
         while nb_req > 0:
             nb_req -= 1
             time.sleep(random.uniform(5, 8))
-            command = random.randint(0, nb_command - 1)
+            command = random.randint(0, self.nb_command - 1)
+            print("Sending message " + str(self.commands[command]))
             for i in range(1, nb_servers + 1):
-                req = comm.isend(commands[command], dest=i, tag=CLIENT_COMMAND)
+                req = comm.isend(self.commands[command], dest=i, tag=CLIENT_COMMAND)
+                req.wait()
 
 def REPL():
     while True:

@@ -19,7 +19,7 @@ def main():
     debug_output = input("Would you like debug prints (y/n)?")
     print("There is " + nb_clients + " clients and " + nb_servers + " servers")
     nb_process = int(nb_servers) + int(nb_clients) + 1
-    s = "mpiexec -n " + str(nb_process) + " --mca opal_warn_on_missing_libcuda 0 --oversubscribe python consensus.py "\
+    s = "mpiexec -n " + str(nb_process) + " --mca opal_warn_on_missing_libcuda 0 --oversubscribe python raft.py "\
         + nb_clients + " " + nb_servers + " " + debug_output
     print(s)
     create_command_list(int(nb_servers) + 1, int(nb_clients))
