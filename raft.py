@@ -56,6 +56,7 @@ class Server:
         self.save_term()
 
     def notify_client(self):
+        print("notif")
         debug_out("notifying client " + str(self.waiting_clients[0]))
         comm.isend(self.waiting_clients[0][0], dest=self.waiting_clients[0][1])
         msg, src = self.waiting_clients.pop(0)
@@ -69,16 +70,19 @@ class Server:
         self.log = log.copy()
 
     def process_vote_request(self, src, msg):
+        #print("server number " + str(self.rank) + " received vote request term : " + str(self.term))
         term, log = msg
         if term > self.term and len(log) >= len(self.log):
             self.update_term(term)
             self.vote = [-1] * (nb_servers + 1)
             self.vote[self.rank] = src
             self.role = "FOLLOWER"
-            self.timeout += 2
-            comm.isend(self.term, dest=src, tag=VOTE_POS)
+            self.timeout += random.randint(2, 5)
+            req = comm.isend(self.term, dest=src, tag=VOTE_POS)
+            req.wait()
         else:
-            comm.isend(self.term, dest=src, tag=VOTE_NEG)
+            req = comm.isend(self.term, dest=src, tag=VOTE_NEG)
+            req.wait()
 
     def process_positive_vote(self, src):
         if self.role != "CANDIDATE":
@@ -94,11 +98,12 @@ class Server:
     def process_heartbeat(self, src, msg):
         debug_out("server number " + str(self.rank) + " receiving HeartBeat")
         self.role = "FOLLOWER"
-        self.timeout += 3
+        self.timeout += random.randint(2, 5)
         term, log = msg
         self.update_term(term)
         self.handle_log(log)
-        comm.isend(self.log, dest=src, tag=HEARTBEAT)
+        req = comm.isend(self.log, dest=src, tag=HEARTBEAT)
+        req.wait()
 
     def process_heartbeat_response(self, src, msg):
         for i in range(len(msg)):
@@ -107,7 +112,7 @@ class Server:
 
     def process_client_command(self, src, msg):
         if self.role == "LEADER":
-            print("Receiving " + msg + " from " + src)
+            print("Receiving " + msg + " from " + str(src))
             self.log.append((msg, src))
             self.replicated.append(1)
             self.waiting_clients.append((msg, src))
@@ -119,41 +124,45 @@ class Server:
         if not is_message:
             return
 
+        print("Message")
+
         src = status.source  # status.Get_source()
         tag = status.tag
         msg = comm.irecv().wait()
         debug_out("server number " + str(self.rank)
               + " source : " + str(src)
               + " tag : " + request[tag]
-              + " term : " + str(msg))
+              + " message : " + str(msg) + " " + str(time.time()))
 
         if tag == VOTE_REQ:
             self.process_vote_request(src, msg)
 
-        if tag == VOTE_POS:
+        elif tag == VOTE_POS:
             self.process_positive_vote(src)
 
-        if tag == VOTE_NEG:
+        elif tag == VOTE_NEG:
             self.vote[src] = -2
 
-        if tag == HEARTBEAT:
+        elif tag == HEARTBEAT:
             if self.role != "LEADER":
                 self.process_heartbeat(src, msg)
             else:  # on utilise le tag heartbeat pour repondre au heartbeat
                 self.process_heartbeat_response(src, msg)
 
-        if tag == CLIENT_COMMAND:
+        elif tag == CLIENT_COMMAND:
+            print("server number " + str(self.rank) + " received message")
             self.process_client_command(src, msg)
 
     def handle_send(self):
         tmp = time.time()
         if self.role == "CANDIDATE":
             if tmp > self.request_vote + 1:
-                debug_out("server number " + str(self.rank) + " is sending VOTE_REQ to everyone")
                 self.request_vote = time.time()
                 for i in range(1, nb_servers + 1):
                     if self.vote[i] == -1:
                         req = comm.isend((self.term, self.log), dest=i, tag=VOTE_REQ)
+                        req.wait()
+                debug_out("server number " + str(self.rank) + " is sending VOTE_REQ to everyone " + str(time.time()))
 
         if self.role == "LEADER":
             if len(self.waiting_clients) > 0:
@@ -161,12 +170,13 @@ class Server:
                 if self.replicated[-len(self.waiting_clients)] >= majority:
                     self.notify_client()
             if tmp > self.leader_heartbeat + 1:
-                debug_out("Server number " + str(self.rank) + " Sending HeartBeat")
+                debug_out("Server number " + str(self.rank) + " Sending HeartBeat time : " + str(time.time()))
                 self.replicated = [1] * len(self.log)
                 self.leader_heartbeat = time.time()
                 for i in range(1, nb_servers + 1):
                     if i != self.rank:
-                        comm.isend((self.term, self.log), dest=i, tag=HEARTBEAT)
+                        req = comm.isend((self.term, self.log), dest=i, tag=HEARTBEAT)
+                        req.wait()
 
     def handle_repl(self):
         status = MPI.Status()
@@ -178,9 +188,7 @@ class Server:
         tag = status.tag
         msg = comm.irecv().wait()
        
-        if tag == START:
-            self.start = True
-        elif tag == CRASH:
+        if tag == CRASH:
             self.crash = True
         elif tag == SPEED:
             self.speed = msg
@@ -200,12 +208,12 @@ class Server:
         self.update_term(self.term + 1)
 
         current_time = time.time()
-        self.timeout = current_time + random.uniform(3.0, 5.0)
+        self.timeout = current_time + random.uniform(3.0, 8.0)
 
         while current_time <= self.timeout:
             if self.role != "LEADER":
                 current_time = time.time()
-            if self.start and not self.crash:
+            if not self.crash:
                 self.handle_message()
                 self.handle_send()
             self.handle_repl()
@@ -220,8 +228,6 @@ class Server:
         self.vote[self.rank] = self.rank
 
     def run(self):
-        while not self.start:
-            self.handle_repl()
         print(str(self.rank) + " is a server")
         while not self.terminate:
             self.consensus()
@@ -257,9 +263,8 @@ class Client:
             time.sleep(random.uniform(5, 8))
             command = random.randint(0, self.nb_command - 1)
             print("Sending message " + str(self.commands[command]))
-            for i in range(1, nb_servers + 1):
-                req = comm.isend(self.commands[command], dest=i, tag=CLIENT_COMMAND)
-                req.wait()
+            #for i in range(1, nb_servers + 1):
+            req = comm.isend(self.commands[command], dest=1, tag=CLIENT_COMMAND)
 
 def REPL():
     while True:
@@ -270,7 +275,7 @@ def REPL():
         command = command.split()
         print(command)
         if command[0] == "START":
-            for i in range(1, nb_servers + nb_clients + 1):
+            for i in range(nb_servers + 1, nb_servers + nb_clients + 1):
                 req = comm.isend("START", dest=i, tag=START)
                 req.wait()
         elif command[0] == "CRASH":
@@ -289,7 +294,7 @@ def main():
     if rank == 0:
         REPL()
 
-    if rank <= nb_servers:
+    elif rank <= nb_servers:
         my_server = Server(rank)
         my_server.run()
 
