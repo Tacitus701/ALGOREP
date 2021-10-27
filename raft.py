@@ -156,6 +156,10 @@ class Server:
     def handle_send(self):
         tmp = time.time()
         if self.role == "CANDIDATE":
+            if nb_servers == 1:
+                debug_out("server number " + str(self.rank) + " is now leader")
+                self.role = "LEADER"
+                self.leader_heartbeat = time.time()
             if tmp > self.request_vote + 1:
                 self.request_vote = time.time()
                 for i in range(1, nb_servers + 1):
@@ -263,8 +267,9 @@ class Client:
             time.sleep(random.uniform(5, 8))
             command = random.randint(0, self.nb_command - 1)
             print("Sending message " + str(self.commands[command]))
-            #for i in range(1, nb_servers + 1):
-            req = comm.isend(self.commands[command], dest=1, tag=CLIENT_COMMAND)
+            for i in range(1, nb_servers + 1):
+                req = comm.isend(self.commands[command], dest=i, tag=CLIENT_COMMAND)
+                req.wait()
 
 def REPL():
     while True:
