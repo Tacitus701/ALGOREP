@@ -120,63 +120,134 @@ class Server:
 
     def process_vote_request(self, src, msg):
         '''
-        Returns the sum of two decimal numbers in binary digits.
+        Respond Yes or No to the sender of the vote request
 
             Parameters:
-                    a (int): A decimal integer
-                    b (int): Another decimal integer
+                    src (int): Id of the sender of the message
+                    msg (int,int[]): Term and list of logs
         '''
 
         term, log = msg
+
+        #Check if the server can respond Yes
         if term > self.term and len(log) >= len(self.log):
+            #Update the term
             self.update_term(term)
+
+            #Reset current vote if the server was CANDIDATE
             self.vote = [-1] * (nb_servers + 1)
+
+            #Change the vote of the current server
             self.vote[self.rank] = src
+
+            #Change the role of the current server
             self.role = "FOLLOWER"
+
+            #Add time to timeout
             self.timeout += random.randint(3, 5)
+
+            #Send positive response
             req = comm.isend(self.term, dest=src, tag=VOTE_POS)
             req.wait()
         else:
+            #Send negative response
             req = comm.isend(self.term, dest=src, tag=VOTE_NEG)
             req.wait()
 
     def process_positive_vote(self, src):
+        '''
+        Process a positive vote response
+
+            Parameters:
+                    src (int): Id of the sender of the response
+        '''
+
+        #Return if the server is not a CANDIDATE
         if self.role != "CANDIDATE":
             return
+
+        #Set the vote of the sender of the response
         self.vote[src] = self.rank
+
+        #Count if the current CANDIDATE has enough vote
         nb_vote = len([vote for vote in self.vote if vote == self.rank])
         if nb_vote >= majority:
+            #If the CANDIDATE has enough vote he become LEADER
             if self.role != "LEADER":
                 print("server number " + str(self.rank) + " is now leader")
             self.role = "LEADER"
+
+            #The server is now LEADER and start sending heartbeat to other servers
             self.leader_heartbeat = time.time()
 
     def process_heartbeat(self, src, msg):
-        debug_out("server number " + str(self.rank) + " receiving HeartBeat")
-        self.role = "FOLLOWER"
-        self.timeout += random.randint(3, 5)
+        '''
+        Process a heartbeat message
+
+            Parameters:
+                    src (int): Id of the sender of the heartbeat (LEADER)
+                    msg (int, int[]): Term and list of logs
+        '''
+
         term, log = msg
+
+        debug_out("server number " + str(self.rank) + " receiving HeartBeat")
+
+        #If the server is not already FOLLOWER change the role
+        self.role = "FOLLOWER"
+
+        #Add time to timeout
+        self.timeout += random.randint(3, 5)
+
+        #Update term and log
         self.update_term(term)
         self.handle_log(log)
+
+        #Send response to LEADER to say that the logs have been replicated
         req = comm.isend(self.log, dest=src, tag=HEARTBEAT)
         req.wait()
 
     def process_heartbeat_response(self, src, msg):
+        '''
+        Process heartbeat message if current server is LEADER
+
+            Parameters:
+                    src (int): Id of the sender of the response
+                    msg (int[]): List of logs
+        '''
+
+        #Add one to each log that has been replicated
         for i in range(len(msg)):
             self.replicated[i] += 1
         return
 
     def process_client_command(self, src, msg):
+        '''
+        Process heartbeat message if current server is LEADER
+
+            Parameters:
+                    src (int): Id of the client
+                    msg (int): Command of the client
+
+        '''
+
+        #Only the LEADER handle a command from a client
         if self.role == "LEADER":
             self.log.append(msg)
             self.replicated.append(1)
             self.waiting_clients.append((msg, src))
             
     def load_data(self):
+        '''
+        Read from files the term and the logs
+        '''
+
+        #Load term from file
         term_filename = "disk/" + str(self.rank) + ".term"
         with open(term_filename, "r+") as file:
             self.term = int(file.readline())
 
+        #Load logs from file
         log_filename = "disk/" + str(self.rank) + ".command"
         self.log = []
         with open(log_filename, "r+") as file:
@@ -185,19 +256,30 @@ class Server:
                 self.log.append(log)
 
     def handle_message(self):
+        '''
+        Check if a message has been received and call the right function to handle the request
+        '''
+
         status = MPI.Status()
+        #Check if a message has been received
         is_message = comm.Iprobe(status=status)
 
         if not is_message:
             return
 
-        src = status.source  # status.Get_source()
+        #Get source
+        src = status.source
+        #Get tag
         tag = status.tag
+        #Wait to receive message
         msg = comm.irecv().wait()
 
+        #If source is REPL
+        #Change crash boolean
         if tag == CRASH:
             self.crash = True
             self.role = "FOLLOWER"
+        #Update speed of the server
         elif tag == SPEED:
             if msg == "LOW":
                 self.speed = LOW
@@ -205,6 +287,7 @@ class Server:
                 self.speed = MEDIUM
             elif msg == "HIGH":
                 self.speed = HIGH
+        #Change crash boolean and load data
         elif tag == RECOVERY:
             self.crash = False
             self.load_data()
@@ -212,55 +295,84 @@ class Server:
         if self.crash:
             return
 
+        #If message come from clients or servers
+
         debug_out("server number " + str(self.rank)
               + " source : " + str(src)
               + " tag : " + request[tag]
               + " message : " + str(msg))
 
+        #If tag is a vote request
         if tag == VOTE_REQ:
             self.process_vote_request(src, msg)
 
+        #If tag is a positive response
         elif tag == VOTE_POS:
             self.process_positive_vote(src)
 
+        #If tag is a negative response
         elif tag == VOTE_NEG:
             self.vote[src] = -2
 
+        #If tag is a heartbeat
         elif tag == HEARTBEAT:
             if self.role != "LEADER":
                 self.process_heartbeat(src, msg)
-            else:  # on utilise le tag heartbeat pour repondre au heartbeat
+            else:  #We use heartbeat tag to respond to heartbeat
                 self.process_heartbeat_response(src, msg)
 
+        #If tag is a client command
         elif tag == CLIENT_COMMAND:
             self.process_client_command(src, msg)
 
 
     def handle_send(self):
+        '''
+        Check if the server need to send message
+        '''
+
+        #Get the current time
         tmp = time.time()
+
+        #If the server is a CANDIDATE
         if self.role == "CANDIDATE":
+
+            #If the system contains only one server the CANDIDATE become LEADER
             if nb_servers == 1:
                 debug_out("server number " + str(self.rank) + " is now leader")
                 self.role = "LEADER"
                 self.leader_heartbeat = time.time()
                 return
+
+            #If a second has passed send vote request to all servers that have not responded
             if tmp > self.request_vote + 1:
                 self.request_vote = time.time()
+
+                #Send a request to other servers
                 for i in range(1, nb_servers + 1):
                     if self.vote[i] == -1:
                         req = comm.isend((self.term, self.log), dest=i, tag=VOTE_REQ)
                         req.wait()
+
                 debug_out("server number " + str(self.rank) + " is sending VOTE_REQ to everyone")
 
+        #If the server is the LEADER
         if self.role == "LEADER":
             if len(self.waiting_clients) > 0:
-                # on notifie le client si le log a ete replique chez une majorite
+
+                #We notify the client if the log has been replicated for a majority
                 if self.replicated[-len(self.waiting_clients)] >= majority:
                     self.notify_client()
+
+            #If self.speed seconds have passed since the last heartbeat send a new heatbeat
             if tmp > self.leader_heartbeat + self.speed:
                 debug_out("Server number " + str(self.rank) + " Sending HeartBeat")
+
+                #TODO ajoux ça marche pas en fait lol lol
                 self.replicated = [1] * len(self.log)
                 self.leader_heartbeat = time.time()
+
+                #Send heartbeat to all FOLLOWERS
                 for i in range(1, nb_servers + 1):
                     if i != self.rank:
                         req = comm.isend((self.term, self.log), dest=i, tag=HEARTBEAT)
