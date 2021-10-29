@@ -3,6 +3,14 @@ import random
 
 
 def create_command_list(start, nb_clients):
+    '''
+    Write in a file a list of commands for every client
+
+            Parameters:
+                    start (int): the strating index of the client list
+                    nb_clients (int): the number of clients
+    '''
+
     nb_command = 10
     for i in range(start, start + nb_clients):
         filename = "client/" + str(i) + ".command"
@@ -13,13 +21,17 @@ def create_command_list(start, nb_clients):
                 file.write(str(command) + '\n')
 
 def main():
+    '''
+    Ask for number of clients and servers and then launch the main process with enough thread
+    '''
+
     nb_clients = input("Number of clients : ")
     nb_servers = input("Number of servers : ")
     answer = False
     debug_output = input("Would you like debug prints (y/n)?")
     print("There is " + nb_clients + " clients and " + nb_servers + " servers")
     nb_process = int(nb_servers) + int(nb_clients) + 1
-    s = "mpiexec -n " + str(nb_process) + " --mca opal_warn_on_missing_libcuda 0 --oversubscribe python raft.py "\
+    s = "mpiexec -n " + str(nb_process) + " --mca opal_warn_on_missing_libcuda 0 --oversubscribe python src/raft.py "\
         + nb_clients + " " + nb_servers + " " + debug_output
     print(s)
     create_command_list(int(nb_servers) + 1, int(nb_clients))
