@@ -27,6 +27,7 @@ request = {0: "VOTE_REQ", 1: "VOTE_POS", 2: "VOTE_NEG", 3: "HEARTBEAT", 4: "CLIE
            5: "START", 6: "CRASH", 7: "SPEED", 8: "RECOVERY"}
 
 #Values for SPEED command
+speed_value = {"LOW": 3, "MEDIUM": 2, "HIGH": 3}
 LOW, MEDIUM, HIGH = 3, 2, 1
 
 
@@ -109,14 +110,17 @@ class Server:
                     log (int[]): The list of all logs
         '''
 
-        #Copy leader's log into the server's log
-        self.log = log.copy()
-
-        #Write log into the log file
-        filename = "disk/" + str(self.rank) + ".command"
-        with open(filename, "w+") as file:
-            for elt in self.log:
-                file.write("Message : " + elt + "\n")
+        # Copy leader's log into the server's log
+        if len(log) > len(self.log):
+            self.log.append(log[len(self.log)])
+            # write to file
+            filename = "disk/" + str(self.rank) + ".command"
+            with open(filename, "w+") as file:
+                for elt in self.log:
+                    file.write("Message : " + elt + "\n")
+            return True
+        else:
+            return False
 
     def process_vote_request(self, src, msg):
         '''
@@ -157,13 +161,17 @@ class Server:
         self.timeout += random.randint(3, 5)
         term, log = msg
         self.update_term(term)
-        self.handle_log(log)
-        req = comm.isend(self.log, dest=src, tag=HEARTBEAT)
+        # On envoie le rang dans le log qui a ete replique -1 si on q rien replique
+        if self.handle_log(log):
+            tosend = len(self.log) - 1
+        else:
+            tosend = -1
+        req = comm.isend(tosend, dest=src, tag=HEARTBEAT)
         req.wait()
 
     def process_heartbeat_response(self, src, msg):
-        for i in range(len(msg)):
-            self.replicated[i] += 1
+        if msg != -1:
+            self.replicated[msg] += 1
         return
 
     def process_client_command(self, src, msg):
@@ -259,7 +267,6 @@ class Server:
                     self.notify_client()
             if tmp > self.leader_heartbeat + self.speed:
                 debug_out("Server number " + str(self.rank) + " Sending HeartBeat")
-                self.replicated = [1] * len(self.log)
                 self.leader_heartbeat = time.time()
                 for i in range(1, nb_servers + 1):
                     if i != self.rank:
