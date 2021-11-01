@@ -55,7 +55,7 @@ class Server:
         self.request_vote = 0  # Time of previous vote request send to followers
         self.log = []  # List of responded messages
         self.replicated = []  # List of number of servers that have replicated the log
-        self.vote = [-1] * (nb_servers + 1)  # List of vote (vote[i] number of vote for server i)
+        self.vote = [-1] * (nb_servers + 1)  # List of vote (vote[i] is the server for which i has voted)
         self.waiting_clients = []  # List of messages waiting for other servers to replicate the message
         self.crash = False  # Bool to indicate if the server has crashed or not
         self.speed = MEDIUM  # Frequency of the heartbeat
@@ -212,7 +212,7 @@ class Server:
 
         # Update term and log
         self.update_term(term)
-        # On envoie le rang dans le log qui a ete replique -1 si on q rien replique
+        # On envoie le rang dans le log qui a ete replique -1 si on a rien replique
         tosend = self.handle_log(log)
         req = comm.isend(tosend, dest=src, tag=HEARTBEAT)
         req.wait()
