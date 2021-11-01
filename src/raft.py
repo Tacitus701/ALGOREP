@@ -49,11 +49,12 @@ class Server:
 
         self.rank = rank  # Id of the thread
         self.role = "FOLLOWER"  # Role in RAFT algorithm
-        self.term = 0  # Actual term
+        self.update_term(0)  # Actual term
         self.timeout = 0  # Time limit for timeout
         self.leader_heartbeat = 0  # Time of previous heartbeat
         self.request_vote = 0  # Time of previous vote request send to followers
         self.log = []  # List of responded messages
+        self.save_log()
         self.replicated = []  # List of number of servers that have replicated the log
         self.vote = [-1] * (nb_servers + 1)  # List of vote (vote[i] number of vote for server i)
         self.waiting_clients = []  # List of messages waiting for other servers to replicate the message
@@ -100,6 +101,12 @@ class Server:
         with open(filename, "a+") as file:
             file.write("Message : " + msg + "\n")
 
+    def save_log(self):
+        filename = "disk/" + str(self.rank) + ".command"
+        with open(filename, "w+") as file:
+            for elt in self.log:
+                file.write("Message : " + elt + "\n")
+
     def handle_log(self, log):
         """
         Replicate leader's log into current server log and write it into log file
@@ -123,10 +130,7 @@ class Server:
             else:
                 self.log[insert] = log[insert]
             # write to file
-            filename = "disk/" + str(self.rank) + ".command"
-            with open(filename, "w+") as file:
-                for elt in self.log:
-                    file.write("Message : " + elt + "\n")
+            self.save_log()
         return insert
 
     def process_vote_request(self, src, msg):
