@@ -98,7 +98,7 @@ class Server:
 
         # Write the message in the log file
         filename = "disk/" + str(self.rank) + ".command"
-        with open(filename, "a+") as file:
+        with open(filename, "r+") as file:
             file.write("Message : " + msg + "\n")
 
     def save_log(self):
@@ -256,13 +256,13 @@ class Server:
 
         # Load term from file
         term_filename = "disk/" + str(self.rank) + ".term"
-        with open(term_filename, "a+") as file:
+        with open(term_filename, "r+") as file:
             self.term = int(file.readline())
 
         # Load logs from file
         log_filename = "disk/" + str(self.rank) + ".command"
         self.log = []
-        with open(log_filename, "a+") as file:
+        with open(log_filename, "r+") as file:
             for line in file:
                 log = line.split()[2]
                 self.log.append(log)
@@ -500,7 +500,7 @@ class Client:
         filename = "client/" + str(self.rank) + ".command"
 
         # Open and read commands from file
-        file = open(filename, "a+")
+        file = open(filename, "r+")
         self.commands = file.read().splitlines()
         file.close()
 
