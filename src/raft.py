@@ -98,7 +98,7 @@ class Server:
 
         # Write the message in the log file
         filename = "disk/" + str(self.rank) + ".command"
-        with open(filename, "r+") as file:
+        with open(filename, "a+") as file:
             file.write("Message : " + msg + "\n")
 
     def save_log(self):
