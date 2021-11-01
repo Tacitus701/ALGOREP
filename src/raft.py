@@ -107,18 +107,27 @@ class Server:
             Parameters:
                     log (int[]): The list of all logs
         """
-
+        insert = -1
         # Copy leader's log into the server's log
         if len(log) > len(self.log):
-            self.log.append(log[len(self.log)])
+            insert = len(self.log)
+        else:
+            i = 0
+            while insert == -1 and i < len(self.log):
+                if log[i] != self.log[i]:
+                    insert = i
+                i += 1
+        if insert != -1:
+            if insert == len(self.log):
+                self.log.append(log[insert])
+            else:
+                self.log[insert] = log[insert]
             # write to file
             filename = "disk/" + str(self.rank) + ".command"
             with open(filename, "w+") as file:
                 for elt in self.log:
                     file.write("Message : " + elt + "\n")
-            return True
-        else:
-            return False
+        return insert
 
     def process_vote_request(self, src, msg):
         """
@@ -204,10 +213,7 @@ class Server:
         # Update term and log
         self.update_term(term)
         # On envoie le rang dans le log qui a ete replique -1 si on q rien replique
-        if self.handle_log(log):
-            tosend = len(self.log) - 1
-        else:
-            tosend = -1
+        tosend = self.handle_log(log)
         req = comm.isend(tosend, dest=src, tag=HEARTBEAT)
         req.wait()
 
