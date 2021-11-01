@@ -244,7 +244,7 @@ class Server:
             self.log.append(msg)
             self.replicated.append(1)
             self.waiting_clients.append((msg, src))
-
+            
     def load_data(self):
         """
         Read from files the term and the logs
@@ -252,13 +252,13 @@ class Server:
 
         # Load term from file
         term_filename = "disk/" + str(self.rank) + ".term"
-        with open(term_filename, "r+") as file:
+        with open(term_filename, "a+") as file:
             self.term = int(file.readline())
 
         # Load logs from file
         log_filename = "disk/" + str(self.rank) + ".command"
         self.log = []
-        with open(log_filename, "r+") as file:
+        with open(log_filename, "a+") as file:
             for line in file:
                 log = line.split()[2]
                 self.log.append(log)
@@ -496,7 +496,7 @@ class Client:
         filename = "client/" + str(self.rank) + ".command"
 
         # Open and read commands from file
-        file = open(filename, "r+")
+        file = open(filename, "a+")
         self.commands = file.read().splitlines()
         file.close()
 
