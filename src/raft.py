@@ -27,7 +27,7 @@ request = {0: "VOTE_REQ", 1: "VOTE_POS", 2: "VOTE_NEG", 3: "HEARTBEAT", 4: "CLIE
            5: "START", 6: "CRASH", 7: "SPEED", 8: "RECOVERY"}
 
 # Values for SPEED command
-speed_value = {"LOW": 3, "MEDIUM": 2, "HIGH": 3}
+speed_value = {"LOW": 3, "MEDIUM": 2, "HIGH": 1}
 LOW, MEDIUM, HIGH = 3, 2, 1
 
 
