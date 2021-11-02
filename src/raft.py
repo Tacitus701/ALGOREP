@@ -20,11 +20,11 @@ comm = MPI.COMM_WORLD
 majority = nb_servers // 2 + 1
 
 # Every tags used in message
-VOTE_REQ, VOTE_POS, VOTE_NEG, HEARTBEAT, CLIENT_COMMAND, START, CRASH, SPEED, RECOVERY = 0, 1, 2, 3, 4, 5, 6, 7, 8
+VOTE_REQ, VOTE_POS, VOTE_NEG, HEARTBEAT, CLIENT_COMMAND, START, CRASH, SPEED, RECOVERY, TIMEOUT = 0, 1, 2, 3, 4, 5, 6, 7, 8, 9
 
 # Dictionary used for debug print
 request = {0: "VOTE_REQ", 1: "VOTE_POS", 2: "VOTE_NEG", 3: "HEARTBEAT", 4: "CLIENT_COMMAND",
-           5: "START", 6: "CRASH", 7: "SPEED", 8: "RECOVERY"}
+           5: "START", 6: "CRASH", 7: "SPEED", 8: "RECOVERY", 9: "TIMEOUT"}
 
 # Values for SPEED command
 speed_value = {"LOW": 3, "MEDIUM": 2, "HIGH": 1}
@@ -88,7 +88,7 @@ class Server:
         If the majority of servers has replicated the message, the leader respond to the client
         """
 
-        debug_out("notifying client " + str(self.waiting_clients[0]))
+        print("Responded to message",str(self.waiting_clients[0][0]))
 
         # Send response to client
         req = comm.isend(self.waiting_clients[0][0], dest=self.waiting_clients[0][1])
@@ -144,7 +144,8 @@ class Server:
         """
 
         term, log = msg
-
+        """if term > self.term:
+            self.update_term(term)"""
         # Check if the server can respond Yes
         if term > self.term and len(log) >= len(self.log):
             # Update the term
@@ -160,7 +161,7 @@ class Server:
             self.role = "FOLLOWER"
 
             # Add time to timeout
-            self.timeout += random.randint(3, 5)
+            self.timeout = time.time() + random.randint(3, 5)
 
             # Send positive response
             req = comm.isend(self.term, dest=src, tag=VOTE_POS)
@@ -304,7 +305,8 @@ class Server:
         elif tag == RECOVERY:
             self.crash = False
             self.load_data()
-
+        elif tag == TIMEOUT:
+            self.timeout = 0;
         # If we crashed we don't communicate with other servers
         if self.crash:
             return
@@ -470,6 +472,12 @@ def REPL():
         # If RECOVERY send message to the server specified in the command
         elif command[0] == "RECOVERY":
             comm.isend("RECOVERY", dest=int(command[1]), tag=RECOVERY)
+        
+        # If TIMEOUT send message to the server specified in the command
+        elif command[0] == "TIMEOUT":
+            comm.isend("TIMEOUT", dest=int(command[1]), tag=TIMEOUT)
+        
+        # Invalid command
         else:
             print("Invalid command")
 
