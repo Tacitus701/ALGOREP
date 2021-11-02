@@ -551,24 +551,17 @@ class Client:
 
         debug_out(str(self.rank) + " : I'm a client")
 
-        # Number of request to send to leader
-        nb_req = 3
-
         # Send request to leader and wait before sending the next request
-        while nb_req > 0:
-            nb_req -= 1
+        for elt in self.commands:
 
             # Wait time between 2 requests
             time.sleep(random.uniform(5, 8))
 
-            # Select a command in the command list
-            command = random.randint(0, self.nb_command - 1)
-
-            debug_out("Sending message " + str(self.commands[command]))
+            debug_out("Sending message " + str(elt))
 
             # Send request to every server because client don't know which one is leader
             for i in range(1, nb_servers + 1):
-                req = comm.isend(self.commands[command], dest=i, tag=CLIENT_COMMAND)
+                req = comm.isend(elt, dest=i, tag=CLIENT_COMMAND)
                 req.wait()
 
 
