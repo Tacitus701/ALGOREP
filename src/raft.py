@@ -57,6 +57,7 @@ class Server:
         self.log = []  # List of responded messages
         self.save_log()
         self.replicated = []  # List of number of servers that have replicated the log
+        self.safe = 0
         self.vote = [-1] * (nb_servers + 1)  # List of vote (vote[i] is the server for which i has voted)
         self.waiting_clients = []  # List of messages waiting for other servers to replicate the message
         self.crash = False  # Bool to indicate if the server has crashed or not
@@ -89,7 +90,7 @@ class Server:
         If the majority of servers has replicated the message, the leader respond to the client
         """
 
-        print("Responded to message",str(self.waiting_clients[0][0]))
+        print("Responded to message", str(self.waiting_clients[0][0]))
 
         # Send response to client
         req = comm.isend(self.waiting_clients[0][0], dest=self.waiting_clients[0][1])
@@ -109,13 +110,15 @@ class Server:
             for elt in self.log:
                 file.write("Message : " + elt + "\n")
 
-    def handle_log(self, log):
+    def handle_log(self, log, replicated):
         """
         Replicate leader's log into current server log and write it into log file
 
             Parameters:
                     log (int[]): The list of all logs
+                    replicated (int[]): The number of replication of log entry
         """
+        self.replicated = replicated
         insert = -1
         # Copy leader's log into the server's log
         if len(log) > len(self.log):
@@ -211,7 +214,7 @@ class Server:
                     msg (int, int[]): Term and list of logs
         """
 
-        term, log = msg
+        term, log, replicated = msg
 
         debug_out("server number " + str(self.rank) + " receiving HeartBeat")
 
@@ -224,7 +227,7 @@ class Server:
         # Update term and log
         self.update_term(term)
         # On envoie le rang dans le log qui a ete replique -1 si on a rien replique
-        tosend = self.handle_log(log)
+        tosend = self.handle_log(log, replicated)
         req = comm.isend(tosend, dest=src, tag=HEARTBEAT)
         req.wait()
 
@@ -382,6 +385,7 @@ class Server:
 
                 # We notify the client if the log has been replicated for a majority
                 if self.replicated[-len(self.waiting_clients)] >= majority:
+                    self.safe = -len(self.waiting_clients)
                     self.notify_client()
 
             # If self.speed seconds have passed since the last heartbeat send a new heatbeat
@@ -392,7 +396,7 @@ class Server:
                 # Send heartbeat to all FOLLOWERS
                 for i in range(1, nb_servers + 1):
                     if i != self.rank:
-                        req = comm.isend((self.term, self.log), dest=i, tag=HEARTBEAT)
+                        req = comm.isend((self.term, self.log, self.replicated), dest=i, tag=HEARTBEAT)
                         req.wait()
 
     def consensus(self):
