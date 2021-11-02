@@ -91,7 +91,8 @@ class Server:
         debug_out("notifying client " + str(self.waiting_clients[0]))
 
         # Send response to client
-        comm.isend(self.waiting_clients[0][0], dest=self.waiting_clients[0][1])
+        req = comm.isend(self.waiting_clients[0][0], dest=self.waiting_clients[0][1])
+        req.wait()
 
         # Remove the message from the list waiting clients
         msg, src = self.waiting_clients.pop(0)
@@ -458,11 +459,13 @@ def REPL():
 
         # If CRASH send message to the server specified in the command
         elif command[0] == "CRASH":
-            comm.isend("CRASH", dest=int(command[1]), tag=CRASH)
+            req = comm.isend("CRASH", dest=int(command[1]), tag=CRASH)
+            req.wait()
 
         # If SPEED send message (LOW/MEDIUM/HIGH) to the server specified in the command
         elif command[0] == "SPEED":
-            comm.isend(speed_value[command[2]], dest=int(command[1]), tag=SPEED)
+            req = comm.isend(speed_value[command[2]], dest=int(command[1]), tag=SPEED)
+            req.wait()
 
         # If RECOVERY send message to the server specified in the command
         elif command[0] == "RECOVERY":
