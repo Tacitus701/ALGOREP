@@ -21,15 +21,15 @@ comm = MPI.COMM_WORLD
 majority = nb_servers // 2 + 1
 
 # Every tags used in message
-VOTE_REQ, VOTE_POS, VOTE_NEG, HEARTBEAT, CLIENT_COMMAND, START, CRASH, SPEED, RECOVERY = 0, 1, 2, 3, 4, 5, 6, 7, 8
+VOTE_REQ, VOTE_POS, VOTE_NEG, HEARTBEAT, CLIENT_COMMAND, START, CRASH, SPEED, RECOVERY, TIMEOUT = 0, 1, 2, 3, 4, 5, 6, 7, 8, 9
 
 # Dictionary used for debug print
 request = {0: "VOTE_REQ", 1: "VOTE_POS", 2: "VOTE_NEG", 3: "HEARTBEAT", 4: "CLIENT_COMMAND",
-           5: "START", 6: "CRASH", 7: "SPEED", 8: "RECOVERY"}
+           5: "START", 6: "CRASH", 7: "SPEED", 8: "RECOVERY", 9: "TIMEOUT"}
 
 # Values for SPEED command
-speed_value = {"LOW": 3, "MEDIUM": 2, "HIGH": 3}
-LOW, MEDIUM, HIGH = 3, 2, 1
+speed_value = {"LOW": 0.3, "MEDIUM": 0.1, "HIGH": 0.05}
+LOW, MEDIUM, HIGH = 0.3, 0.1, 0.05
 
 
 def debug_out(msg):
@@ -52,8 +52,6 @@ class Server:
         self.role = "FOLLOWER"  # Role in RAFT algorithm
         self.update_term(0)  # Actual term
         self.timeout = 0  # Time limit for timeout
-        self.leader_heartbeat = 0  # Time of previous heartbeat
-        self.request_vote = 0  # Time of previous vote request send to followers
         self.log = []  # List of responded messages
         self.save_log()
         self.replicated = []  # List of number of servers that have replicated the log
@@ -89,17 +87,18 @@ class Server:
         If the majority of servers has replicated the message, the leader respond to the client
         """
 
-        debug_out("notifying client " + str(self.waiting_clients[0]))
+        print("Responded to message",str(self.waiting_clients[0][0]))
 
         # Send response to client
-        comm.isend(self.waiting_clients[0][0], dest=self.waiting_clients[0][1])
+        req = comm.isend(self.waiting_clients[0][0], dest=self.waiting_clients[0][1])
+        req.wait()
 
         # Remove the message from the list waiting clients
         msg, src = self.waiting_clients.pop(0)
 
         # Write the message in the log file
         filename = "disk/" + str(self.rank) + ".command"
-        with open(filename, "r+") as file:
+        with open(filename, "a+") as file:
             file.write("Message : " + msg + "\n")
 
     def save_log(self):
@@ -144,6 +143,8 @@ class Server:
         """
 
         term, log = msg
+        """if term > self.term:
+            self.update_term(term)"""
 
         # Check if the server can respond Yes
         if term > self.term and len(log) >= len(self.log):
@@ -160,12 +161,15 @@ class Server:
             self.role = "FOLLOWER"
 
             # Add time to timeout
-            self.timeout += random.randint(3, 5)
-
+            self.timeout = time.time() + random.randint(3, 5)
             # Send positive response
             req = comm.isend(self.term, dest=src, tag=VOTE_POS)
             req.wait()
         else:
+            if term > self.term:
+                self.role = "FOLLOWER"
+                self.update_term(term)
+                self.timeout = time.time() + random.randint(3, 5)
             # Send negative response
             req = comm.isend(self.term, dest=src, tag=VOTE_NEG)
             req.wait()
@@ -303,8 +307,10 @@ class Server:
         # Change crash boolean and load data
         elif tag == RECOVERY:
             self.crash = False
+            self.timeout = time.time() + random.randint(3, 5)
             self.load_data()
-
+        elif tag == TIMEOUT:
+            self.timeout = 0;
         # If we crashed we don't communicate with other servers
         if self.crash:
             return
@@ -343,9 +349,6 @@ class Server:
         Check if the server need to send message
         """
 
-        # Get the current time
-        tmp = time.time()
-
         # If the server is a CANDIDATE
         if self.role == "CANDIDATE":
 
@@ -356,17 +359,14 @@ class Server:
                 self.leader_heartbeat = time.time()
                 return
 
-            # If a second has passed send vote request to all servers that have not responded
-            if tmp > self.request_vote + 1:
-                self.request_vote = time.time()
 
-                # Send a request to other servers
-                for i in range(1, nb_servers + 1):
-                    if self.vote[i] == -1:
-                        req = comm.isend((self.term, self.log), dest=i, tag=VOTE_REQ)
-                        req.wait()
+            # Send a request to other servers
+            for i in range(1, nb_servers + 1):
+                if self.vote[i] == -1:
+                    req = comm.isend((self.term, self.log), dest=i, tag=VOTE_REQ)
+                    req.wait()
 
-                debug_out("server number " + str(self.rank) + " is sending VOTE_REQ to everyone")
+            debug_out("server number " + str(self.rank) + " is sending VOTE_REQ to everyone")
 
         # If the server is the LEADER
         if self.role == "LEADER":
@@ -376,16 +376,14 @@ class Server:
                 if self.replicated[-len(self.waiting_clients)] >= majority:
                     self.notify_client()
 
-            # If self.speed seconds have passed since the last heartbeat send a new heatbeat
-            if tmp > self.leader_heartbeat + self.speed:
-                debug_out("Server number " + str(self.rank) + " Sending HeartBeat")
-                self.leader_heartbeat = time.time()
+            debug_out("Server number " + str(self.rank) + " Sending HeartBeat")
+            self.leader_heartbeat = time.time()
 
-                # Send heartbeat to all FOLLOWERS
-                for i in range(1, nb_servers + 1):
-                    if i != self.rank:
-                        req = comm.isend((self.term, self.log), dest=i, tag=HEARTBEAT)
-                        req.wait()
+            # Send heartbeat to all FOLLOWERS
+            for i in range(1, nb_servers + 1):
+                if i != self.rank:
+                    req = comm.isend((self.term, self.log), dest=i, tag=HEARTBEAT)
+                    req.wait()
 
     def consensus(self):
         """
@@ -413,6 +411,9 @@ class Server:
             # If needed send message to other servers
             if not self.crash:
                 self.handle_send()
+
+            # Speed of the process
+            time.sleep(self.speed)
 
         # Too long
         debug_out("server number " + str(self.rank) + " has timed out")
@@ -460,7 +461,8 @@ def REPL():
         # If CRASH send message to the server specified in the command
         elif command[0] == "CRASH":
             try:
-                comm.isend("CRASH", dest=int(command[1]), tag=CRASH)
+                req = comm.isend("CRASH", dest=int(command[1]), tag=CRASH)
+                req.wait()
             except:
                 print("REPL: invalid argument")
                 continue
@@ -468,17 +470,30 @@ def REPL():
         # If SPEED send message (LOW/MEDIUM/HIGH) to the server specified in the command
         elif command[0] == "SPEED":
             try:
-                comm.isend(speed_value[command[2]], dest=int(command[1]), tag=SPEED)
+                req = comm.isend(speed_value[command[2]], dest=int(command[1]), tag=SPEED)
+                req.wait()
             except:
                 print("REPL: invalid argument")
                 continue
         # If RECOVERY send message to the server specified in the command
         elif command[0] == "RECOVERY":
             try:
-                comm.isend("RECOVERY", dest=int(command[1]), tag=RECOVERY)
+                req = comm.isend("RECOVERY", dest=int(command[1]), tag=RECOVERY)
+                req.wait()
             except:
                 print("REPL: invalid argument")
                 continue
+
+        # If TIMEOUT send message to the server specified in the command
+        elif command[0] == "TIMEOUT":
+            try:
+                req = comm.isend("TIMEOUT", dest=int(command[1]), tag=TIMEOUT)
+                req.wait()
+            except:
+                print("REPL: invalid argument")
+                continue
+        
+        # Invalid command
         else:
             print("Invalid command")
 
