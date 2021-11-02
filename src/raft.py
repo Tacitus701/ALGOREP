@@ -1,3 +1,4 @@
+import mpi4py.MPI
 from mpi4py import MPI
 import sys
 import random
@@ -458,15 +459,26 @@ def REPL():
 
         # If CRASH send message to the server specified in the command
         elif command[0] == "CRASH":
-            comm.isend("CRASH", dest=int(command[1]), tag=CRASH)
+            try:
+                comm.isend("CRASH", dest=int(command[1]), tag=CRASH)
+            except:
+                print("REPL: invalid argument")
+                continue
 
         # If SPEED send message (LOW/MEDIUM/HIGH) to the server specified in the command
         elif command[0] == "SPEED":
-            comm.isend(speed_value[command[2]], dest=int(command[1]), tag=SPEED)
-
+            try:
+                comm.isend(speed_value[command[2]], dest=int(command[1]), tag=SPEED)
+            except:
+                print("REPL: invalid argument")
+                continue
         # If RECOVERY send message to the server specified in the command
         elif command[0] == "RECOVERY":
-            comm.isend("RECOVERY", dest=int(command[1]), tag=RECOVERY)
+            try:
+                comm.isend("RECOVERY", dest=int(command[1]), tag=RECOVERY)
+            except:
+                print("REPL: invalid argument")
+                continue
         else:
             print("Invalid command")
 
