@@ -144,6 +144,7 @@ class Server:
         term, log = msg
         """if term > self.term:
             self.update_term(term)"""
+
         # Check if the server can respond Yes
         if term > self.term and len(log) >= len(self.log):
             # Update the term
@@ -160,11 +161,14 @@ class Server:
 
             # Add time to timeout
             self.timeout = time.time() + random.randint(3, 5)
-
             # Send positive response
             req = comm.isend(self.term, dest=src, tag=VOTE_POS)
             req.wait()
         else:
+            if term > self.term:
+                self.role = "FOLLOWER"
+                self.update_term(term)
+                self.timeout = time.time() + random.randint(3, 5)
             # Send negative response
             req = comm.isend(self.term, dest=src, tag=VOTE_NEG)
             req.wait()
@@ -302,6 +306,7 @@ class Server:
         # Change crash boolean and load data
         elif tag == RECOVERY:
             self.crash = False
+            self.timeout = time.time() + random.randint(3, 5)
             self.load_data()
         elif tag == TIMEOUT:
             self.timeout = 0;
