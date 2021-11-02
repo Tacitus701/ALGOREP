@@ -1,7 +1,7 @@
 all: requirement
 
 requirement:
-	pip install -r requirements.txt
+	pip3 install -r requirements.txt
 
 run: clean
 	python3 src/main.py
