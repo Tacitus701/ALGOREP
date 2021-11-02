@@ -461,6 +461,10 @@ def REPL():
 
         # Split command if it contains more than 1 word
         command = command.split()
+
+        if len(command) == 0:
+            continue
+
         print(command)
 
         # If START send message to all clients
