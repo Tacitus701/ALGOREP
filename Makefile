@@ -7,4 +7,5 @@ run: clean
 	python3 src/main.py
 
 clean:
-	rm -f client/* disk/*
+	rm -rf client disk
+	mkdir disk client
