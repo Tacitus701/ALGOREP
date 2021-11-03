@@ -96,6 +96,12 @@ class Server:
         req = comm.isend(self.waiting_clients[0][0], dest=self.waiting_clients[0][1])
         req.wait()
 
+        for i in range(1,nb_servers + 1):
+            if i == self.rank:
+                continue
+            req = comm.isend((self.term,self.log,self.replicated), dest=i, tag=HEARTBEAT)
+            req.wait()
+
         # Remove the message from the list waiting clients
         msg, src = self.waiting_clients.pop(0)
 
@@ -201,6 +207,8 @@ class Server:
             if self.role != "LEADER":
                 print("server number " + str(self.rank) + " is now leader")
             self.role = "LEADER"
+            if len(self.replicated) > len(self.log):
+                self.replicated = self.replicated[:len(self.log)]
 
             # The server is now LEADER and start sending heartbeat to other servers
             self.leader_heartbeat = time.time()
@@ -343,7 +351,7 @@ class Server:
             self.process_heartbeat(src, msg)
         elif tag == HEARTBEAT_RESPONSE:
             self.process_heartbeat_response(src, msg)
-            
+
         # If tag is a client command
         elif tag == CLIENT_COMMAND:
             self.process_client_command(src, msg)
