@@ -21,11 +21,11 @@ comm = MPI.COMM_WORLD
 majority = nb_servers // 2 + 1
 
 # Every tags used in message
-VOTE_REQ, VOTE_POS, VOTE_NEG, HEARTBEAT, CLIENT_COMMAND, START, CRASH, SPEED, RECOVERY, TIMEOUT = 0, 1, 2, 3, 4, 5, 6, 7, 8, 9
+VOTE_REQ, VOTE_POS, VOTE_NEG, HEARTBEAT, CLIENT_COMMAND, START, CRASH, SPEED, RECOVERY, TIMEOUT, HEARTBEAT_RESPONSE = 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
 
 # Dictionary used for debug print
 request = {0: "VOTE_REQ", 1: "VOTE_POS", 2: "VOTE_NEG", 3: "HEARTBEAT", 4: "CLIENT_COMMAND",
-           5: "START", 6: "CRASH", 7: "SPEED", 8: "RECOVERY", 9: "TIMEOUT"}
+           5: "START", 6: "CRASH", 7: "SPEED", 8: "RECOVERY", 9: "TIMEOUT", 10: "HEARTBEAT_RESPONSE"}
 
 # Values for SPEED command
 speed_value = {"LOW": 3, "MEDIUM": 2, "HIGH": 1}
@@ -121,19 +121,19 @@ class Server:
         self.replicated = replicated
         insert = -1
         # Copy leader's log into the server's log
-        if len(log) > len(self.log):
+        i = 0
+        while insert == -1 and i < len(self.log):
+            if log[i] != self.log[i]:
+                insert = i
+            i += 1
+        if insert == -1 and len(log) > len(self.log):
             insert = len(self.log)
-        else:
-            i = 0
-            while insert == -1 and i < len(self.log):
-                if log[i] != self.log[i]:
-                    insert = i
-                i += 1
         if insert != -1:
             if insert == len(self.log):
                 self.log.append(log[insert])
             else:
                 self.log[insert] = log[insert]
+                self.log = self.log[:insert + 1]
             # write to file
             self.save_log()
         return insert
@@ -228,7 +228,7 @@ class Server:
         self.update_term(term)
         # On envoie le rang dans le log qui a ete replique -1 si on a rien replique
         tosend = self.handle_log(log, replicated)
-        req = comm.isend(tosend, dest=src, tag=HEARTBEAT)
+        req = comm.isend(tosend, dest=src, tag=HEARTBEAT_RESPONSE)
         req.wait()
 
     def process_heartbeat_response(self, src, msg):
@@ -340,11 +340,10 @@ class Server:
 
         # If tag is a heartbeat
         elif tag == HEARTBEAT:
-            if self.role != "LEADER":
-                self.process_heartbeat(src, msg)
-            else:  # We use heartbeat tag to respond to heartbeat
-                self.process_heartbeat_response(src, msg)
-
+            self.process_heartbeat(src, msg)
+        elif tag == HEARTBEAT_RESPONSE:
+            self.process_heartbeat_response(src, msg)
+            
         # If tag is a client command
         elif tag == CLIENT_COMMAND:
             self.process_client_command(src, msg)
